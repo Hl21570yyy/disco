@@ -21,7 +21,12 @@ def map_streetview(metadata, regions, output):
                 image = (metadata.parent / row["image_path"]).resolve(strict=True)
                 folder = output / cell
                 folder.mkdir(parents=True, exist_ok=True)
-                (folder / f"{index}{image.suffix.lower()}").symlink_to(image)
+                target = folder / f"{index}{image.suffix.lower()}"
+                if target.is_symlink():
+                    if target.resolve() == image:
+                        continue
+                    target.unlink()
+                target.symlink_to(image)
 
 
 def map_satellite(raster, regions, output):
