@@ -1,6 +1,6 @@
 {
   "task": "singapore_gdp",
-  "label_file": "singapore_h3_res7_gdp_2019.csv",
+  "label_file": "singapore_gdp.csv",
   "split_file": "sg_gdp_split.json",
   "split_seed": 2028,
   "seeds": [666, 2026, 2027, 2028, 2029],

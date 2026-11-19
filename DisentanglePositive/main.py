@@ -1,5 +1,4 @@
 import argparse
-import csv
 import json
 import os
 import random
@@ -32,7 +31,6 @@ class TrainConfig:
     weight_decay: float
     temperature: float
     edge_weight_scale: float
-    louvain_resolution: float
     functional_dim: int
     visual_dim: int
     functional_input_parts: tuple
@@ -110,13 +108,12 @@ class JointDisentangledModel(nn.Module):
     def step_epoch(self):
         self.shared_branch.step_epoch()
 
-    def forward(self, functional_orig, visual_orig, global_idx: np.ndarray = None):
+    def forward(self, functional_orig, visual_orig):
 
 
         loss_contrast, z_shared_functional_raw, z_shared_visual_raw = self.shared_branch(
             functional_orig,
             visual_orig,
-            global_idx=global_idx,
         )
 
 
@@ -212,14 +209,12 @@ class JointDisentangledModel(nn.Module):
 
 def train_model(data: dict, cfg: TrainConfig, save_dir):
     city_save_dir = save_dir
-    city_reso = cfg.louvain_resolution
     functional_tensor = torch.tensor(data["functional"])
     visual_tensor = torch.tensor(data["visual"])
 
     dataset = TensorDataset(
         functional_tensor,
         visual_tensor,
-        torch.arange(len(functional_tensor)),
     )
     dataloader = DataLoader(
         dataset,
@@ -242,177 +237,110 @@ def train_model(data: dict, cfg: TrainConfig, save_dir):
 
     os.makedirs(city_save_dir, exist_ok=True)
     best_model_path = os.path.join(city_save_dir, "joint_model.pt")
-    log_path = os.path.join(city_save_dir, "training_log.csv")
-
-    log_fields = [
-        "epoch",
-        "seed",
-        "phase",
-        "if_mask",
-        "mask_ratio",
-        "lr",
-        "loss_total",
-        "loss_contrast",
-        "loss_ortho",
-        "loss_mask_raw",
-        "loss_mask_used",
-        "loss_global",
-        "grad_norm_mean",
-        "grad_norm_max",
-        "eligible_for_best",
-        "is_best",
-        "best_epoch",
-        "best_loss",
-    ]
 
     best_loss = float("inf")
     best_epoch = 0
-    best_region_labels = None
 
     selection_start_epoch = (
         cfg.warmup_epochs + cfg.mining_burnin + 1
     )
-    with open(log_path, "w", encoding="utf-8", newline="") as log_file:
-        log_writer = csv.DictWriter(log_file, fieldnames=log_fields)
-        log_writer.writeheader()
-        log_file.flush()
 
-        tracked_loss_names = [
-            "contrast",
-            "ortho",
-            "mask_raw",
-            "mask_used",
-            "global",
-            "total",
-        ]
+    tracked_loss_names = [
+        "contrast",
+        "ortho",
+        "mask_raw",
+        "mask_used",
+        "global",
+        "total",
+    ]
 
-        for epoch in range(cfg.num_epochs):
-            model.train()
-            acc_losses = {name: 0.0 for name in tracked_loss_names}
-            grad_norm_sum = 0.0
-            grad_norm_max = 0.0
-            epoch_lr = optimizer.param_groups[0]["lr"]
+    for epoch in range(cfg.num_epochs):
+        model.train()
+        acc_losses = {name: 0.0 for name in tracked_loss_names}
+        grad_norm_sum = 0.0
+        grad_norm_max = 0.0
+        epoch_lr = optimizer.param_groups[0]["lr"]
 
-            for b_functional, b_visual, b_idx in dataloader:
-                b_functional = b_functional.to(cfg.device)
-                b_visual = b_visual.to(cfg.device)
-                b_idx_np = b_idx.numpy()
+        for b_functional, b_visual in dataloader:
+            b_functional = b_functional.to(cfg.device)
+            b_visual = b_visual.to(cfg.device)
 
-                optimizer.zero_grad()
-                total_loss, loss_dict = model(
-                    b_functional,
-                    b_visual,
-                    global_idx=b_idx_np,
-                )
-                total_loss.backward()
-
-                grad_norm = compute_grad_norm(model)
-                grad_norm_sum += grad_norm
-                grad_norm_max = max(grad_norm_max, grad_norm)
-
-                optimizer.step()
-
-                for name in tracked_loss_names:
-                    acc_losses[name] += loss_dict[name]
-
-            n_batches = len(dataloader)
-            avg_losses = {
-                name: acc_losses[name] / n_batches
-                for name in tracked_loss_names
-            }
-            avg_grad_norm = grad_norm_sum / n_batches
-
-            epoch_num = epoch + 1
-            eligible_for_best = epoch_num >= selection_start_epoch
-            is_best = (
-                eligible_for_best
-                and avg_losses["total"] < best_loss
+            optimizer.zero_grad()
+            total_loss, loss_dict = model(
+                b_functional,
+                b_visual,
             )
+            total_loss.backward()
 
-            if is_best:
-                best_loss = avg_losses["total"]
-                best_epoch = epoch_num
-                torch.save(model.state_dict(), best_model_path)
+            grad_norm = compute_grad_norm(model)
+            grad_norm_sum += grad_norm
+            grad_norm_max = max(grad_norm_max, grad_norm)
 
-                best_region_labels = (
-                    model.shared_branch.loss_fn.get_labels_from_edges(
-                        len(data["h3"]),
-                        method="louvain",
-                        resolution=city_reso,
-                    ).copy()
-                )
+            optimizer.step()
 
-            scheduler.step()
-            model.step_epoch()
+            for name in tracked_loss_names:
+                acc_losses[name] += loss_dict[name]
 
-            phase = (
-                f"standard_warmup_{epoch_num}/{cfg.warmup_epochs + 1}"
+        n_batches = len(dataloader)
+        avg_losses = {
+            name: acc_losses[name] / n_batches
+            for name in tracked_loss_names
+        }
+        avg_grad_norm = grad_norm_sum / n_batches
+
+        epoch_num = epoch + 1
+        eligible_for_best = epoch_num >= selection_start_epoch
+        is_best = (
+            eligible_for_best
+            and avg_losses["total"] < best_loss
+        )
+
+        if is_best:
+            best_loss = avg_losses["total"]
+            best_epoch = epoch_num
+            torch.save(model.state_dict(), best_model_path)
+
+        scheduler.step()
+        model.step_epoch()
+
+        if epoch_num % 10 == 0 or epoch == 0:
+            print_phase = (
+                f"Standard Warmup {epoch_num}/{cfg.warmup_epochs + 1}"
                 if epoch <= cfg.warmup_epochs
-                else "positive_mining"
+                else "Positive Mining"
             )
 
-            log_writer.writerow(
-                {
-                    "epoch": epoch_num,
-                    "seed": cfg.seed,
-                    "phase": phase,
-                    "if_mask": 1,
-                    "mask_ratio": cfg.mask_ratio,
-                    "lr": epoch_lr,
-                    "loss_total": avg_losses["total"],
-                    "loss_contrast": avg_losses["contrast"],
-                    "loss_ortho": avg_losses["ortho"],
-                    "loss_mask_raw": avg_losses["mask_raw"],
-                    "loss_mask_used": avg_losses["mask_used"],
-                    "loss_global": avg_losses["global"],
-                    "grad_norm_mean": avg_grad_norm,
-                    "grad_norm_max": grad_norm_max,
-                    "eligible_for_best": int(eligible_for_best),
-                    "is_best": int(is_best),
-                    "best_epoch": best_epoch,
-                    "best_loss": best_loss,
-                }
+            best_mark = " (best)" if is_best else ""
+            mask_status = (
+                f"raw={avg_losses['mask_raw']:.4f}, "
+                f"used={avg_losses['mask_used']:.4f}"
             )
-            log_file.flush()
 
-            if epoch_num % 10 == 0 or epoch == 0:
-                print_phase = (
-                    f"Standard Warmup {epoch_num}/{cfg.warmup_epochs + 1}"
-                    if epoch <= cfg.warmup_epochs
-                    else "Positive Mining"
-                )
+            print(
+                f"\n   Epoch {epoch_num:3d}/{cfg.num_epochs} "
+                f"| LR: {epoch_lr:.6f}"
+            )
+            print(
+                f"     [Total]          "
+                f"{avg_losses['total']:.4f}{best_mark}"
+            )
+            print(
+                f"     [Contrast {print_phase}] "
+                f"{avg_losses['contrast']:.4f}"
+            )
+            print(f"     [Ortho]          {avg_losses['ortho']:.4f}")
+            print(f"     [Mask]           {mask_status}")
+            print(f"     [Global Recon]   {avg_losses['global']:.4f}")
+            print(
+                f"     [Grad Norm]      mean={avg_grad_norm:.6f}, "
+                f"max={grad_norm_max:.6f}"
+            )
 
-                best_mark = " (best)" if is_best else ""
-                mask_status = (
-                    f"raw={avg_losses['mask_raw']:.4f}, "
-                    f"used={avg_losses['mask_used']:.4f}"
-                )
-
+            if eligible_for_best and best_epoch > 0:
                 print(
-                    f"\n   Epoch {epoch_num:3d}/{cfg.num_epochs} "
-                    f"| LR: {epoch_lr:.6f}"
+                    f"     [Best]           epoch={best_epoch}, "
+                    f"loss={best_loss:.6f}"
                 )
-                print(
-                    f"     [Total]          "
-                    f"{avg_losses['total']:.4f}{best_mark}"
-                )
-                print(
-                    f"     [Contrast {print_phase}] "
-                    f"{avg_losses['contrast']:.4f}"
-                )
-                print(f"     [Ortho]          {avg_losses['ortho']:.4f}")
-                print(f"     [Mask]           {mask_status}")
-                print(f"     [Global Recon]   {avg_losses['global']:.4f}")
-                print(
-                    f"     [Grad Norm]      mean={avg_grad_norm:.6f}, "
-                    f"max={grad_norm_max:.6f}"
-                )
-
-                if eligible_for_best and best_epoch > 0:
-                    print(
-                        f"     [Best]           epoch={best_epoch}, "
-                        f"loss={best_loss:.6f}"
-                    )
 
     best_state = torch.load(best_model_path, map_location=cfg.device)
     model.load_state_dict(best_state)
@@ -429,18 +357,16 @@ def train_model(data: dict, cfg: TrainConfig, save_dir):
         z_shared.cpu().numpy(),
         z_functional.cpu().numpy(),
         z_visual.cpu().numpy(),
-        best_region_labels,
     )
 
 def fit(functional, visual, region_ids, config, device, output):
     cfg = TrainConfig(**config, device=device)
     set_seed(cfg.seed)
-    data = {"functional": functional, "visual": visual, "h3": region_ids}
-    _, shared, functional, visual, labels = train_model(data, cfg, output)
+    data = {"functional": functional, "visual": visual}
+    _, shared, functional, visual = train_model(data, cfg, output)
     for name, value in (("shared", shared), ("functional", functional), ("visual", visual)):
         np.save(output / f"{name}_embeddings.npy", value)
     np.save(output / "h3_order.npy", np.asarray(region_ids))
-    np.save(output / "positive_region_labels.npy", labels)
     return shared, functional, visual
 
 

@@ -104,5 +104,4 @@ def write_results(directory, rows):
         writer.writerows(summary)
     markdown = "\n".join(table) + "\n"
     (directory / "sg_gdp.md").write_text(markdown)
-    print("\nSG GDP | mean (sample std) | errors in million 2017 USD\n")
     print(markdown)

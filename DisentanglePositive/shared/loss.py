@@ -1,12 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import networkx as nx
-import community as community_louvain
-from scipy.sparse import lil_matrix
-from scipy.sparse.csgraph import connected_components
-from collections import defaultdict
 
 
 class CrossModalContrastiveLoss(nn.Module):
@@ -22,7 +16,6 @@ class CrossModalContrastiveLoss(nn.Module):
         self.thresh_max = thresh_max
         self.beta = beta
         self.cur_epoch = 0
-        self.edge_weights = defaultdict(float)
 
     def step_epoch(self):
         self.cur_epoch += 1
@@ -37,7 +30,6 @@ class CrossModalContrastiveLoss(nn.Module):
         self,
         z_functional: torch.Tensor,
         z_visual: torch.Tensor,
-        global_idx: np.ndarray,
     ) -> torch.Tensor:
 
 
@@ -73,70 +65,7 @@ class CrossModalContrastiveLoss(nn.Module):
         if self.beta != 1.0:
             W = W * self.beta
 
-
-        rows, cols = torch.where(W > 0)
-        for i, j in zip(rows.tolist(), cols.tolist()):
-            if i == j:
-                continue
-
-            gi = int(global_idx[i])
-            gj = int(global_idx[j])
-            self.edge_weights[frozenset({gi, gj})] += float(W[i, j])
-
         return W
-
-
-    def get_labels_from_edges(
-        self,
-        n_nodes: int,
-        method: str = "louvain",
-        resolution: float = 1.0,
-    ) -> np.ndarray:
-        if method == "louvain":
-            G = nx.Graph()
-            G.add_nodes_from(range(n_nodes))
-
-            for edge, weight in self.edge_weights.items():
-                u, v = tuple(edge)
-                G.add_edge(u, v, weight=weight)
-
-            partition = community_louvain.best_partition(
-                G,
-                weight="weight",
-                resolution=resolution,
-            )
-            labels = np.array([partition[i] for i in range(n_nodes)])
-
-        elif method == "connected_components":
-            adj = lil_matrix(
-                (n_nodes, n_nodes),
-                dtype=np.float32,
-            )
-
-            for edge, weight in self.edge_weights.items():
-                i, j = tuple(edge)
-                adj[i, j] = weight
-                adj[j, i] = weight
-
-            _, labels = connected_components(
-                adj.tocsr(),
-                directed=False,
-                return_labels=True,
-            )
-
-        else:
-            raise ValueError(method)
-
-        unique, counts = np.unique(labels, return_counts=True)
-        remap = {
-            old: new
-            for new, old in enumerate(
-                unique[np.argsort(-counts)]
-            )
-        }
-        labels = np.array([remap[label] for label in labels])
-
-        return labels
 
 
     def _semi_loss(
@@ -273,7 +202,7 @@ class CrossModalContrastiveLoss(nn.Module):
 
         return per_anchor_loss[has_positive].mean()
 
-    def forward(self, functional_embs, visual_embs, global_idx):
+    def forward(self, functional_embs, visual_embs):
         if functional_embs.size(0) < 2:
             return torch.tensor(0.0, device=functional_embs.device, requires_grad=True)
         z_functional = F.normalize(functional_embs, dim=-1)
@@ -282,6 +211,6 @@ class CrossModalContrastiveLoss(nn.Module):
             l1 = self._semi_loss(z_functional, z_visual)
             l2 = self._semi_loss(z_visual, z_functional)
             return (l1 + l2) * 0.5
-        positive_weights = self._mine_positive_weights(z_functional, z_visual, global_idx)
+        positive_weights = self._mine_positive_weights(z_functional, z_visual)
         z_mean = F.normalize((z_functional + z_visual) / 2.0, dim=-1)
         return self._semi_loss_mean(z_mean, positive_weights)

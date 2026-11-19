@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 from .projector import ModalProjector
 from .loss import CrossModalContrastiveLoss
 
@@ -54,7 +53,6 @@ class UrbanRegionAligner(nn.Module):
         self,
         functional_features,
         visual_features,
-        global_idx: np.ndarray = None,
     ):
         z_functional_raw = self.proj_functional(functional_features)
         z_visual_raw = self.proj_visual(visual_features)
@@ -63,6 +61,5 @@ class UrbanRegionAligner(nn.Module):
         loss = self.loss_fn(
             z_functional,
             z_visual,
-            global_idx=global_idx,
         )
         return loss, z_functional_raw, z_visual_raw
