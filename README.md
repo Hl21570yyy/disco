@@ -26,6 +26,7 @@ h3==4.5.0
 shapely==2.1.2
 Pillow==12.2.0
 geopandas==1.1.3
+rasterio==1.4.4
 ```
 
 ### Deom
