@@ -30,6 +30,7 @@ rasterio==1.4.4
 ```
 
 ### Usage
+To reproduce the experiments in the paper, please follow the three stages below in order: IntraModality training, DisentanglePositive training, and DownstreamTask evaluation.
 
 For the IntraModality training phase, run the following command with your own data:
 
