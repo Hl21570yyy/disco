@@ -29,18 +29,24 @@ geopandas==1.1.3
 rasterio==1.4.4
 ```
 
-### Deom
+### Usage
 
-For training, please run the script as follows:
+For the IntraModality training phase, run the following command with your own data:
 
 ```bash
-python train.py
+bash intramodality.sh
 ```
 
-For evaluation, please run the script as follows:
+For the DisentanglePositive training phase, run the following command with your own data:
 
 ```bash
-python evaluate.py
+bash disentanglepositive.sh
+```
+
+For the DownstreamTask evaluation phase, run the following command with your own data:
+
+```bash
+bash downstreamtask_evaluate.sh
 ```
 
 ## Reference
