@@ -28,7 +28,7 @@ def train(data_dir, config_dir, output_dir, device):
     region_ids = sorted(key.strip().lower() for key in poi_ids)
     functional, visual = load_modalities(data_dir, region_ids, model_config)
     representation_dir = output_dir / "DisentanglePositive"
-    representation_dir.mkdir(parents=True)
+    representation_dir.mkdir(parents=True, exist_ok=True)
     print(f"DisentanglePositive device: {device}", flush=True)
     fit(functional, visual, region_ids, model_config, device, representation_dir)
 
