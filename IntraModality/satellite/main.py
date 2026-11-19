@@ -118,18 +118,17 @@ def train_and_extract(city: str, data: dict, modules: dict):
     return final_z, data["h3_labels"]
 
 def save_results(city: str, final_z: np.ndarray, final_h3_list: list, modules: dict):
-    city_dir = os.path.join(SAVE_DIR, city)
-    os.makedirs(city_dir, exist_ok=True)
+    os.makedirs(SAVE_DIR, exist_ok=True)
 
-    np.save(os.path.join(city_dir, "satellite_embeddings.npy"), final_z)
-    np.save(os.path.join(city_dir, "satellite_h3_order.npy"), np.array(final_h3_list))
+    np.save(os.path.join(SAVE_DIR, "satellite_embeddings.npy"), final_z)
+    np.save(os.path.join(SAVE_DIR, "satellite_h3_order.npy"), np.array(final_h3_list))
 
     torch.save({
         "encoder": modules["encoder"].state_dict(),
         "predictor": modules["predictor"].state_dict(),
         "contrastive": modules["contrastive"].state_dict(),
         "reconstruction": modules["reconstruction"].state_dict(),
-    }, os.path.join(city_dir, "satellite_model.pt"))
+    }, os.path.join(SAVE_DIR, "satellite_model.pt"))
 
 def main():
     global DATA_PATH, SAVE_DIR, EPOCHS

@@ -120,13 +120,12 @@ def train_city(city: str, data: dict, modules: dict) -> torch.Tensor:
     return z_final
 
 def save_results(city: str, z: torch.Tensor, data: dict, modules: dict):
-    city_dir = os.path.join(SAVE_DIR, city)
-    os.makedirs(city_dir, exist_ok=True)
+    os.makedirs(SAVE_DIR, exist_ok=True)
 
     z_np = z.cpu().numpy()
     print(f"   Embedding mean={z_np.mean():.4f}  std={z_np.std():.4f}")
-    np.save(os.path.join(city_dir, "mobility_flow_embeddings.npy"), z_np)
-    np.save(os.path.join(city_dir, "mobility_flow_h3_order.npy"), np.array(data["h3_list"]))
+    np.save(os.path.join(SAVE_DIR, "mobility_flow_embeddings.npy"), z_np)
+    np.save(os.path.join(SAVE_DIR, "mobility_flow_h3_order.npy"), np.array(data["h3_list"]))
 
     ckpt = {
         "encoder": modules["encoder"].state_dict(),
@@ -134,7 +133,7 @@ def save_results(city: str, z: torch.Tensor, data: dict, modules: dict):
         "contrastive": modules["contrastive"].state_dict(),
         "reconstruction": modules["reconstruction"].state_dict(),
     }
-    torch.save(ckpt, os.path.join(city_dir, "flow_model.pt"))
+    torch.save(ckpt, os.path.join(SAVE_DIR, "flow_model.pt"))
 
 @torch.no_grad()
 def evaluate(city: str, data: dict, modules: dict):

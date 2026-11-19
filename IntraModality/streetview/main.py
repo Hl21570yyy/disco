@@ -251,16 +251,15 @@ def train_and_aggregate(city: str, data: dict, modules: dict):
 
 
 def save_results(city: str, final_z: np.ndarray, final_h3_list: list, modules: dict):
-    city_dir = os.path.join(SAVE_DIR, city)
-    os.makedirs(city_dir, exist_ok=True)
-    np.save(os.path.join(city_dir, "streetview_embeddings.npy"), final_z)
-    np.save(os.path.join(city_dir, "streetview_h3_order.npy"), np.array(final_h3_list))
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    np.save(os.path.join(SAVE_DIR, "streetview_embeddings.npy"), final_z)
+    np.save(os.path.join(SAVE_DIR, "streetview_h3_order.npy"), np.array(final_h3_list))
     torch.save({
         "encoder": modules["encoder"].state_dict(),
         "predictor": modules["predictor"].state_dict(),
         "contrastive": modules["contrastive"].state_dict(),
         "reconstruction": modules["reconstruction"].state_dict(),
-    }, os.path.join(city_dir, "streetview_model.pt"))
+    }, os.path.join(SAVE_DIR, "streetview_model.pt"))
 
 
 def main():
